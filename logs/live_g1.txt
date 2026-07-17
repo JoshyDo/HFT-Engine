@@ -1,0 +1,46 @@
+Phase 7 Boot OK | Boost.Beast 359 | simdjson 3.10.1
+[Phase7-Live] Dauer=15s, BF-Intervall=1000ms, arb=persistent-HW, Symbole=[btcusdt,ethusdt,solusdt,xrpusdt,dogeusdt,adausdt,avaxusdt,linkusdt]
+[Phase7-Live] Graph allokiert: V=100000, edges=100000
+[Phase7-Live] Graph generiert (statische Topologie)
+[Phase7-Live] WS-Endpoint: /stream?streams=btcusdt@ticker/ethusdt@ticker/solusdt@ticker/xrpusdt@ticker/dogeusdt@ticker/adausdt@ticker/avaxusdt@ticker/linkusdt@ticker
+[Phase7-Live] LUT: btcusdt->0 dogeusdt->4 ethusdt->1 linkusdt->7 solusdt->2 xrpusdt->3 adausdt->5 avaxusdt->6 
+[Phase7-Live] WS-Client gestartet
+[Phase7-Live] VRAMUpdater gestartet (pinned core=4, hiw=128, timeout=1ms)
+[Phase7-Live] Pipeline laeuft 15s...
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 1] upd=0.646816ms bf=2136ms arb=261.15ms conv=N opps=100000 | CPU: ing_mean=10415ns ing_max=54500ns pcie_mean=1023820ns pcie_max=7117600ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 2] upd=0.00448ms bf=1933.48ms arb=260.357ms conv=N opps=100000 | CPU: ing_mean=8678ns ing_max=54500ns pcie_mean=6272395ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 3] upd=0.004896ms bf=1874.62ms arb=260.47ms conv=N opps=100000 | CPU: ing_mean=8071ns ing_max=54500ns pcie_mean=4938366ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 4] upd=0.003392ms bf=2029.41ms arb=262.528ms conv=N opps=100000 | CPU: ing_mean=7747ns ing_max=54500ns pcie_mean=4579121ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 5] upd=0.004416ms bf=1890.61ms arb=260.728ms conv=N opps=100000 | CPU: ing_mean=7482ns ing_max=54500ns pcie_mean=4380794ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 6] upd=0.030816ms bf=2159.76ms arb=259.957ms conv=N opps=100000 | CPU: ing_mean=7323ns ing_max=54500ns pcie_mean=3662404ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+[BF 7] upd=0.004832ms bf=1730.08ms arb=260.267ms conv=N opps=100000 | CPU: ing_mean=7221ns ing_max=54500ns pcie_mean=3991931ns pcie_max=47527300ns | sample: 0->1 1->2 2->3 3->4 4->5
+
+[Phase7-Live] === Shutdown ===
+Ticks processed (Update-Kernel): 84
+BF runs: 7
+Total opportunities found: 700000
+GPU times (accumulated over 7 BF runs):
+  Update-Kernel (incl. Sync+D2D, total): 0.699648 ms
+  Bellman-Ford-V2 (total): 13754 ms
+  Arbitrage-Detect (total): 1825.46 ms
+  Per BF-run: update=0.0999497ms  bf=1964.85ms  arb=260.78ms
+WS client: pushed=96 parse_errors=0 drops_full=0 unknown_sym=0
+VRAMUpdater: pushed=96 batches=82 coalesce_early=0 coalesce_timeout=82 coalesce_total=82
+
+[Latency Report]
+  Ingestion (parse+LUT+push, WS-Thread):
+    n=96 mean=7221ns max=54500ns hist=[0,0,0,89,7,0] (<1us,<10us,<100us,<1ms,<10ms,>=10ms)
+  PCIe API (cudaMemcpyAsync submission, Updater-Thread):
+    n=82 mean=3991931ns max=47527300ns bytes=3072 hist=[0,0,0,0,23,59] (<1us,<10us,<100us,<1ms,<10ms,>=10ms)
+  GPU (cudaEvent, hard-wall on default stream):
+    update (incl. Sync+D2D): 0.699648 ms total / 7 runs = 0.0999497 ms/run
+    bellman_ford_full_v2:    13754 ms total / 7 runs = 1964.85 ms/run
+    arbitrage_detection_v2:  1825.46 ms total / 7 runs = 260.78 ms/run
+  GPU per-Run (sum): 2225.73 ms

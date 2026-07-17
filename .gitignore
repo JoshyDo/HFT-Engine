@@ -1,0 +1,42 @@
+# Build artifacts
+build/
+cmake-build/
+out/
+build-*/
+build_release/
+
+# Profiling artifacts
+*.nsys-rep
+*.nsys-rep.sqlite
+*.sqlite
+hft_timeline_*
+hft_kernel_*
+ncu_*
+
+# IDE / editor
+.vscode/
+.vscode
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# OS
+Thumbs.db
+
+# Misc
+*.log
+*.tmp
+.cache/
+
+# Third-party / external toolchain
+# Boost-Header liegen AUSSERHALB des Repos unter C:\Libraries\boost_1_90_0
+# und werden ueber find_package(Boost HINTS ...) gefunden.
+# Wenn jemand sie lokal in third_party/ klont, gehoert das nicht ins Repo.
+third_party/
+third-party/test_gdi.obj
+
+# test artifacts
+test_gdi.obj
+*_test.cpp.obj
+

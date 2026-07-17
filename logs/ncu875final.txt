@@ -1,0 +1,8 @@
+==PROF== Connected to process 40704 (C:\HFT\build_release\Release\HFT_Engine.exe)
+==PROF== Disconnected from process 40704
+==PROF== Creating report from application replay data: 0%...100%
+"ID","Process ID","Process Name","Host Name","Kernel Name","Context","Stream","Block Size","Grid Size","Device","CC","Section Name","Metric Name","Metric Unit","Metric Value"
+"0","40704","HFT_Engine.exe","127.0.0.1","arbitrage_relax_and_flag_kernel_persistent(double *, const long long *, const int *, const double *, int *, int)","1","7","(128, 1, 1)","(391, 1, 1)","0","12.0","Command line profiler metrics","dram__throughput.avg.pct_of_peak_sustained_elapsed","%","1,03"
+"0","40704","HFT_Engine.exe","127.0.0.1","arbitrage_relax_and_flag_kernel_persistent(double *, const long long *, const int *, const double *, int *, int)","1","7","(128, 1, 1)","(391, 1, 1)","0","12.0","Command line profiler metrics","gpu__time_duration.sum","ns","4.113.843.296"
+"0","40704","HFT_Engine.exe","127.0.0.1","arbitrage_relax_and_flag_kernel_persistent(double *, const long long *, const int *, const double *, int *, int)","1","7","(128, 1, 1)","(391, 1, 1)","0","12.0","Command line profiler metrics","launch__waves_per_multiprocessor","","0,47"
+"0","40704","HFT_Engine.exe","127.0.0.1","arbitrage_relax_and_flag_kernel_persistent(double *, const long long *, const int *, const double *, int *, int)","1","7","(128, 1, 1)","(391, 1, 1)","0","12.0","Command line profiler metrics","smsp__inst_executed.sum","inst","104.221.505.326"

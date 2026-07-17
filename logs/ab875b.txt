@@ -1,0 +1,20 @@
+Phase 7 Boot OK | Boost.Beast 359 | simdjson 3.10.1
+
+--- Phase 6: End-to-End Pipeline ---
+[Config] VRAM budget: 12288 MiB
+[Config] 100000 nodes, 800000 edges
+[Config] A/B-Vergleich V1-Arbitrage vs. V2-Optimized aktiv
+[GPU] Graph generation: 0.3715 ms
+[GPU] Using V2 (per-block flags, single PCIe read)
+[GPU] Bellman-Ford: 2380.52 ms (converged=0)
+
+[A/B] V1-Arbitrage (original):
+  V1: 9730.55 ms, 100373 edges
+[A/B] V2-Optimized (WPT=2 + Early-Term):
+  V2-Opt: 4323.14 ms, 799988 edges
+[A/B] V2-Persistent (Cooperative Groups):
+[Persistent] num_blocks=391 max_blocks_per_sm=12 numSMs=70 (Cooperative Kernel OK)
+  V2-Persistent: 1940.41 ms, 787796 edges
+
+[A/B] Speedup vs V1:  V2-Opt=2.25081x  V2-Persistent=5.0147x
+[A/B] INFO: Edge counts differ! V1=100373 V2-Opt=799988 (erwartet, da V1/V2-BF intern unterschiedlich)
