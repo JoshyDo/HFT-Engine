@@ -47,7 +47,13 @@ static inline void _mm_pause() {}
 #include "thread_pinning.hpp"
 #include "vram_updater.hpp"
 #include "windows_lean.hpp"
-#include "ws_client.hpp"
+#include "feed_client.hpp"
+#include "parsers.hpp"
+#include "transports/websocket_transport.hpp"
+#include "transports/udp_multicast_transport.hpp"
+
+using WsClient = phase7::WebSocketTransport<phase7::BinanceJsonParser>;
+using UdpClient = phase7::UdpMulticastTransport<phase7::SbeParser>;
 
 // =============================================================================
 // PHASE 7 TOOLCHAIN SANITY: Both libraries must be includable and generate
@@ -500,9 +506,9 @@ int main(int argc, char** argv) {
         std::cout << "Usage:\n"
                   << "  HFT_Engine               Run  demo (12 GiB VRAM)\n"
                   << "  HFT_Engine <budget>       demo with custom VRAM\n"
-                  << "  HFT_Engine e2e           End-to-end pipeline (12 GiB VRAM)\n"
                   << "  HFT_Engine e2e <budget>  End-to-end with custom VRAM\n"
                   << "  HFT_Engine phase7-ws [symbol]  WebSocket client (Binance ticker, 10s)\n"
+                  << "  HFT_Engine phase7-udp-sbe [ip] [port]  UDP Multicast SBE client\n"
                   << "\nVRAM budget format:\n"
                   << "  12G    = 12 GiB  (default)\n"
                   << "  4096M  = 4 GiB\n"
@@ -520,16 +526,16 @@ int main(int argc, char** argv) {
         std::cout << "[Phase7-WS] Initializing SPSC Ringbuffer + WebSocket Client...\n";
 
         // SPSC Ringbuffer allocated on HEAP (2 MB, > Windows thread stack limit).
-        auto ringbuffer = std::make_shared<phase7::WebSocketTickerClient::RingBuffer>();
+        auto ringbuffer = std::make_shared<WsClient::RingBuffer>();
 
-        phase7::WebSocketTickerClient::Config cfg;
+        WsClient::Config cfg;
         // Target symbol from argv[2] (default: btcusdt).
         if (argc > 2) {
             std::string sym(argv[2]);
             cfg.target = "/ws/" + sym + "@ticker";
         }
 
-        phase7::WebSocketTickerClient client(cfg, ringbuffer);
+        WsClient client(cfg, ringbuffer);
         client.run();
 
         // : Launch VRAMUpdater to stimulate the PCIe API timer.
@@ -556,6 +562,34 @@ int main(int argc, char** argv) {
                       << " weight=" << t.weight << "\n";
             ++samples;
         }
+        return 0;
+    }
+
+    if (argc > 1 && std::string_view(argv[1]) == "phase7-udp-sbe") {
+        std::cout << "[Phase7-UDP] Initializing SPSC Ringbuffer + UDP Multicast Client...\n";
+
+        auto ringbuffer = std::make_shared<UdpClient::RingBuffer>();
+
+        UdpClient::Config cfg;
+        cfg.host = (argc > 2) ? argv[2] : "224.0.0.1";
+        cfg.port = (argc > 3) ? argv[3] : "12345";
+        
+        // Ensure some symbol is mapped if needed (just for test)
+        cfg.symbol_to_node_id["BTCUSDT"] = 0;
+        cfg.symbol_to_node_id["ETHUSDT"] = 1;
+
+        UdpClient client(cfg, ringbuffer);
+        client.run();
+
+        std::cout << "[Phase7-UDP] Bound to " << cfg.host << ":" << cfg.port << ". Running for 10s...\n";
+        std::this_thread::sleep_for(std::chrono::seconds(10));
+
+        client.stop();
+        std::this_thread::sleep_for(std::chrono::milliseconds(300));
+
+        std::cout << "[Phase7-UDP] ticks_pushed=" << client.ticks_pushed() << " drops_full=" << client.drops_full()
+                  << " parse_errors=" << client.parse_errors() << "\n";
+
         return 0;
     }
 
@@ -751,8 +785,8 @@ int main(int argc, char** argv) {
         phase7::ExecutionEngine engine(host_csr, "api.binance.com", "443");
 
         // --- 2. SPSC + VRAMUpdater + WS-Client (Multi-Symbol + LUT) ---
-        auto ringbuffer = std::make_shared<phase7::WebSocketTickerClient::RingBuffer>();
-        phase7::WebSocketTickerClient::Config ws_cfg;
+        auto ringbuffer = std::make_shared<WsClient::RingBuffer>();
+        WsClient::Config ws_cfg;
 
         // Symbol -> node_id (Here: node_id is the base edge index of the pair)
         // btcusdt -> Edge 0 (and 1)
@@ -775,7 +809,7 @@ int main(int argc, char** argv) {
         }
         std::cout << "\n";
 
-        phase7::WebSocketTickerClient ws_client(ws_cfg, ringbuffer);
+        WsClient ws_client(ws_cfg, ringbuffer);
         ws_client.run();
         std::cout << "[Phase7-Live] WS client started\n";
 
@@ -1032,9 +1066,9 @@ int main(int argc, char** argv) {
                       << " mean=" << static_cast<int>(ws_client.ingest_mean_ns()) << "ns"
                       << " max=" << ws_client.ingest_max_ns() << "ns"
                       << " hist=[";
-            for (std::size_t i = 0; i < phase7::WebSocketTickerClient::kIngestBuckets; ++i) {
+            for (std::size_t i = 0; i < WsClient::kIngestBuckets; ++i) {
                 std::cout << ws_client.ingest_bucket(i)
-                          << ((i + 1 < phase7::WebSocketTickerClient::kIngestBuckets) ? "," : "");
+                          << ((i + 1 < WsClient::kIngestBuckets) ? "," : "");
             }
             std::cout << "] (<1us,<10us,<100us,<1ms,<10ms,>=10ms)\n";
         } else {
