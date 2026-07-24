@@ -1,9 +1,14 @@
 // =============================================================================
-// websocket_transport.hpp - Asynchronous Boost.Beast WebSocket Client Transport
+// websocket_transport.hpp - Asynchronous Boost.Beast WebSocket Coroutine Transport
 // =============================================================================
 #pragma once
 
 #include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/ssl.hpp>
 #include <boost/beast.hpp>
 #include <boost/beast/ssl.hpp>
@@ -14,6 +19,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <atomic>
 
 #include "../feed_client.hpp"
 #include "../thread_pinning.hpp"
@@ -34,7 +40,6 @@ public:
 
     WebSocketTransport(Config cfg, std::shared_ptr<RingBuffer> ringbuffer)
         : Base(std::move(cfg), std::move(ringbuffer)),
-          resolver_(net::make_strand(ioc_)),
           ws_(net::make_strand(ioc_), ssl_ctx_) {
     }
 
@@ -53,7 +58,9 @@ public:
         if (!this->running_.compare_exchange_strong(expected, true)) {
             return;
         }
-        do_connect();
+        
+        net::co_spawn(ioc_, connect_and_read_loop(), net::detached);
+        
         const int core = this->cfg_.io_core_id;
         io_thread_ = std::thread([this, core]() {
             if (core >= 0) {
@@ -78,87 +85,94 @@ private:
     net::io_context ioc_;
     ssl::context ssl_ctx_{ssl::context::tls_client};
     beast::flat_buffer buffer_;
-    net::ip::tcp::resolver resolver_;
     websocket::stream<beast::ssl_stream<beast::tcp_stream>> ws_;
     std::thread io_thread_;
 
-    void do_connect() {
-        ws_.next_layer().native_handle();
-        resolver_.async_resolve(
-            this->cfg_.host, this->cfg_.port, beast::bind_front_handler(&WebSocketTransport::on_resolve, this));
-    }
+    net::awaitable<void> connect_and_read_loop() {
+        auto executor = co_await net::this_coro::executor;
+        net::ip::tcp::resolver resolver(executor);
 
-    void on_resolve(beast::error_code ec, net::ip::tcp::resolver::results_type results) {
-        if (ec) return schedule_reconnect(ec);
-        beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
-        beast::get_lowest_layer(ws_).async_connect(results,
-                                                   beast::bind_front_handler(&WebSocketTransport::on_connect, this));
-    }
+        while (this->running_.load(std::memory_order_acquire)) {
+            beast::error_code ec;
+            
+            ws_.next_layer().native_handle();
+            
+            // Resolve
+            auto results = co_await resolver.async_resolve(this->cfg_.host, this->cfg_.port, net::redirect_error(net::use_awaitable, ec));
+            if (ec) {
+                co_await handle_reconnect(ec);
+                continue;
+            }
 
-    void on_connect(beast::error_code ec, net::ip::tcp::resolver::results_type::endpoint_type) {
-        if (ec) return schedule_reconnect(ec);
-        ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
-        ws_.set_option(websocket::stream_base::decorator(
-            [](websocket::request_type& req) { req.set(beast::http::field::user_agent, "HFT-Engine/Phase7"); }));
+            // Connect
+            beast::get_lowest_layer(ws_).expires_after(std::chrono::seconds(30));
+            co_await beast::get_lowest_layer(ws_).async_connect(results, net::redirect_error(net::use_awaitable, ec));
+            if (ec) {
+                co_await handle_reconnect(ec);
+                continue;
+            }
 
-        ws_.next_layer().async_handshake(ssl::stream_base::client,
-                                         beast::bind_front_handler(&WebSocketTransport::on_ssl_handshake, this));
-    }
+            // Options
+            ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::client));
+            ws_.set_option(websocket::stream_base::decorator(
+                [](websocket::request_type& req) { req.set(beast::http::field::user_agent, "HFT-Engine/Phase7"); }));
 
-    void on_ssl_handshake(beast::error_code ec) {
-        if (ec) return schedule_reconnect(ec);
-        ws_.async_handshake(
-            this->cfg_.host, this->cfg_.target, beast::bind_front_handler(&WebSocketTransport::on_handshake, this));
-    }
+            // SSL Handshake
+            co_await ws_.next_layer().async_handshake(ssl::stream_base::client, net::redirect_error(net::use_awaitable, ec));
+            if (ec) {
+                co_await handle_reconnect(ec);
+                continue;
+            }
 
-    void on_handshake(beast::error_code ec) {
-        if (ec) return schedule_reconnect(ec);
-        this->reconnect_attempts_ = 0;
-        do_read();
-    }
+            // WS Handshake
+            co_await ws_.async_handshake(this->cfg_.host, this->cfg_.target, net::redirect_error(net::use_awaitable, ec));
+            if (ec) {
+                co_await handle_reconnect(ec);
+                continue;
+            }
 
-    void do_read() {
-        buffer_.consume(buffer_.size());
-        ws_.async_read(buffer_, beast::bind_front_handler(&WebSocketTransport::on_read, this));
-    }
+            this->reconnect_attempts_ = 0;
 
-    void on_read(beast::error_code ec, std::size_t bytes_transferred) {
-        boost::ignore_unused(bytes_transferred);
+            // Read Loop
+            while (this->running_.load(std::memory_order_acquire)) {
+                buffer_.consume(buffer_.size());
+                
+                co_await ws_.async_read(buffer_, net::redirect_error(net::use_awaitable, ec));
+                
+                if (ec) {
+                    if (ec == websocket::error::closed) {
+                        break;
+                    }
+                    break;
+                }
 
-        if (ec) {
-            if (ec == websocket::error::closed) return;
-            return schedule_reconnect(ec);
+                std::string_view raw{static_cast<const char*>(buffer_.data().data()), buffer_.data().size()};
+                this->on_message(raw);
+            }
+
+            if (this->running_.load(std::memory_order_acquire)) {
+                co_await handle_reconnect(ec);
+            }
         }
-
-        std::string_view raw{static_cast<const char*>(buffer_.data().data()), buffer_.data().size()};
-        
-        // --- DELEGATE TO BASE CLASS VIA CRTP ---
-        this->on_message(raw);
-
-        if (this->running_.load(std::memory_order_acquire)) {
-            do_read();
-        }
     }
 
-    void schedule_reconnect([[maybe_unused]] const beast::error_code& ec) {
-        if (!this->running_.load(std::memory_order_acquire)) return;
+    net::awaitable<void> handle_reconnect(const beast::error_code& /*ec*/) {
+        if (!this->running_.load(std::memory_order_acquire)) co_return;
 
         if (this->cfg_.max_reconnect_attempts != 0 && this->reconnect_attempts_ >= this->cfg_.max_reconnect_attempts) {
             this->running_.store(false, std::memory_order_release);
             ioc_.stop();
-            return;
+            co_return;
         }
+        
         ++this->reconnect_attempts_;
 
         beast::error_code shutdown_ec;
         beast::get_lowest_layer(ws_).socket().shutdown(net::ip::tcp::socket::shutdown_send, shutdown_ec);
 
-        net::steady_timer timer(ioc_, std::chrono::steady_clock::now() + this->cfg_.reconnect_delay);
-        timer.async_wait([this](beast::error_code) {
-            if (this->running_.load(std::memory_order_acquire)) {
-                do_connect();
-            }
-        });
+        net::steady_timer timer(co_await net::this_coro::executor, this->cfg_.reconnect_delay);
+        beast::error_code timer_ec;
+        co_await timer.async_wait(net::redirect_error(net::use_awaitable, timer_ec));
     }
 };
 

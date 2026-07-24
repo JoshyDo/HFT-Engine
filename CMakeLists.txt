@@ -73,12 +73,11 @@ if(MSVC)
     target_compile_options(simdjson PRIVATE /W0)
 endif()
 
-# 4.3 Boost (using find_package for cross-platform, fallback to FetchContent if not found)
-# On Mac we can use brew install boost. On Windows we might have a hardcoded path.
-find_package(Boost 1.83 QUIET CONFIG)
+# 4.3 Boost (using find_package for cross-platform)
+find_package(Threads REQUIRED)
+find_package(Boost REQUIRED)
 if(NOT Boost_FOUND)
-    # Generic find module if CONFIG fails
-    find_package(Boost 1.83 QUIET)
+    message(FATAL_ERROR "Boost is required.")
 endif()
 
 # 4.4 OpenSSL
@@ -108,7 +107,7 @@ if(ipo_supported)
     set_target_properties(core_lib PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 if(Boost_FOUND)
-    target_link_libraries(core_lib PUBLIC Boost::headers Boost::disable_autolinking)
+    target_link_libraries(core_lib PUBLIC Boost::headers Threads::Threads Boost::disable_autolinking)
 endif()
 target_link_libraries(core_lib PUBLIC simdjson::simdjson)
 
