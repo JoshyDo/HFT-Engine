@@ -89,6 +89,7 @@ find_package(OpenSSL QUIET)
 set(CORE_LIB_SOURCES
     src/thread_pinning.cpp
     src/execution_engine.cpp
+    src/wal_writer.cpp
 )
 
 if(CMAKE_CUDA_COMPILER)

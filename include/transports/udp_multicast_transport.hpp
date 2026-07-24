@@ -33,8 +33,8 @@ public:
     using Config = typename Base::Config;
     using RingBuffer = typename Base::RingBuffer;
 
-    UdpMulticastTransport(Config cfg, std::shared_ptr<RingBuffer> ringbuffer)
-        : Base(std::move(cfg), std::move(ringbuffer)), socket_(ioc_) {
+    UdpMulticastTransport(Config cfg, std::shared_ptr<RingBuffer> ringbuffer, std::shared_ptr<wal::WalWriter::RingBuffer> wal_ringbuffer = nullptr)
+        : Base(std::move(cfg), std::move(ringbuffer), std::move(wal_ringbuffer)), socket_(ioc_) {
     }
 
     ~UdpMulticastTransport() {

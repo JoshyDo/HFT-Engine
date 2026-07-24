@@ -38,8 +38,8 @@ public:
     using Config = typename Base::Config;
     using RingBuffer = typename Base::RingBuffer;
 
-    WebSocketTransport(Config cfg, std::shared_ptr<RingBuffer> ringbuffer)
-        : Base(std::move(cfg), std::move(ringbuffer)),
+    WebSocketTransport(Config cfg, std::shared_ptr<RingBuffer> ringbuffer, std::shared_ptr<wal::WalWriter::RingBuffer> wal_ringbuffer = nullptr)
+        : Base(std::move(cfg), std::move(ringbuffer), std::move(wal_ringbuffer)),
           ws_(net::make_strand(ioc_), ssl_ctx_) {
     }
 

@@ -7,7 +7,7 @@ Engineered for strict zero-allocation in the hot path, OS-scheduler bypass, and 
 ## 🚀 Performance Metrics (Hardware-Verified)
 
 *   **Tick-to-Trade (T2T) Latency:** **< 300 µs** (measured from OS socket ingest to TCP payload dispatch).
-*   **CUDA Micro-Kernel Execution:** **~34.9 µs** (Dense-Graph Bellman-Ford on NVIDIA RTX 5070 Ti).
+*   **CUDA Micro-Kernel Execution:** **23.2 µs** (Dense-Graph Bellman-Ford on NVIDIA RTX 5070 Ti).
 *   **Parser Tail-Latency (99.9th):** **6 CPU Cycles** (CRTP-based Zero-Copy SBE parsing, defeating branch misprediction penalties).
 
 ## 🧠 Architecture Overview
@@ -19,7 +19,7 @@ graph TD;
     A[Market Data Ingest UDP/TCP] -->|Zero-Copy / Packed Structs| B(CRTP Transport Abstraction);
     B -->|Lock-Free Ringbuffer| C(Spin-Lock Dispatcher);
     C -->|PCIe Pinned Memory| D[CUDA GPU VRAM];
-    D -->|FP32 Micro-Kernel < 35us| E(Negative Cycle Detection);
+    D -->|FP32 Micro-Kernel  ~23.2 µs| E(Negative Cycle Detection);
     E -->|Asynchronous Readback| F(Cycle Extraction & Pricing);
     F -->|Zero-Allocation Thread Pool| G[Order Execution Endpoint];
 
@@ -43,15 +43,21 @@ Market data feeds (JSON, SBE) are parsed using the Curiously Recurring Template 
 
 Instead of forcing a global VRAM grid synchronization, the dense trading pair graph ($V \le 1024$) is pulled entirely into the L1/Shared Memory of a *single* Streaming Multiprocessor (SM), turning milliseconds into microseconds.
 
+### 5. Zero-Overhead Write-Ahead Log (WAL)
+
+Asynchronous, lock-free deterministic event logging offloaded to a dedicated background thread. Utilizes a Vyukov-style SPSC ring buffer and 1GB pre-allocated, pre-faulted mmap NVMe chunks to guarantee zero page-fault latency spikes in the network hot-path.
+
+### 6. C++20 Coroutine Transport Layer
+Completely excised legacy callback chains and manual file descriptor polling. The network transport (TCP/UDP/WebSocket) operates entirely on `boost::asio` and C++20 coroutines (`co_await`), ensuring deterministic execution flows and strict RAII without sacrificing zero-allocation guarantees.
+
 ## 🛠️ Build Instructions
 
-Requires a Linux environment (Ubuntu 22.04+ recommended) or macOS for CPU-only builds. NVIDIA CUDA Toolkit 12.x is strictly required for GPU execution.
+Requires a Linux environment (Ubuntu 22.04+), macOS, or Windows (MSVC). NVIDIA CUDA Toolkit 12.x is strictly required for full GPU execution (CPU-only build available as fallback).
 
 ```bash
 mkdir build && cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
-make -j$(nproc)
-
+cmake --build . --config Release -j 8
 ```
 
-*Note: The CMake configuration enforces `-O3`, `-march=native`, and strict warning flags. It will natively compile the `epoll` or `kqueue` backends depending on the target OS.*
+*Note: The CMake configuration enforces strict optimization flags (`-O3` / `/O2`, `-march=native`) and utilizes Boost.Asio for cross-platform, asynchronous I/O.*
