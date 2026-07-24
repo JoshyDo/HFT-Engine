@@ -49,6 +49,7 @@ static inline void _mm_pause() {}
 #include "windows_lean.hpp"
 #include "feed_client.hpp"
 #include "parsers.hpp"
+#include "wal/wal_writer.hpp"
 #include "transports/websocket_transport.hpp"
 #include "transports/udp_multicast_transport.hpp"
 
@@ -535,7 +536,11 @@ int main(int argc, char** argv) {
             cfg.target = "/ws/" + sym + "@ticker";
         }
 
-        WsClient client(cfg, ringbuffer);
+        auto wal_ringbuffer = std::make_shared<phase7::wal::WalWriter::RingBuffer>();
+        phase7::wal::WalWriter wal_writer("smoke_wal.bin", wal_ringbuffer);
+        wal_writer.start();
+
+        WsClient client(cfg, ringbuffer, wal_ringbuffer);
         client.run();
 
         // : Launch VRAMUpdater to stimulate the PCIe API timer.
@@ -809,7 +814,11 @@ int main(int argc, char** argv) {
         }
         std::cout << "\n";
 
-        WsClient ws_client(ws_cfg, ringbuffer);
+        auto wal_ringbuffer = std::make_shared<phase7::wal::WalWriter::RingBuffer>();
+        phase7::wal::WalWriter wal_writer("live_wal.bin", wal_ringbuffer);
+        wal_writer.start(3); // Pin WAL to core 3 for I/O
+
+        WsClient ws_client(ws_cfg, ringbuffer, wal_ringbuffer);
         ws_client.run();
         std::cout << "[Phase7-Live] WS client started\n";
 

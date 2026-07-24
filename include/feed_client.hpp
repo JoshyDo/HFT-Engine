@@ -21,6 +21,7 @@
 
 #include "market_tick.hpp"
 #include "spsc_ringbuffer.hpp"
+#include "wal/wal_writer.hpp"
 
 namespace phase7 {
 
@@ -40,8 +41,8 @@ public:
         int io_core_id = -1;
     };
 
-    TransportBase(Config cfg, std::shared_ptr<RingBuffer> ringbuffer)
-        : cfg_(std::move(cfg)), ringbuffer_(std::move(ringbuffer)) {
+    TransportBase(Config cfg, std::shared_ptr<RingBuffer> ringbuffer, std::shared_ptr<wal::WalWriter::RingBuffer> wal_ringbuffer = nullptr)
+        : cfg_(std::move(cfg)), ringbuffer_(std::move(ringbuffer)), wal_ringbuffer_(std::move(wal_ringbuffer)) {
         
         // LUT lowercase pre-population
         if (!cfg_.symbol_to_node_id.empty()) {
@@ -130,6 +131,18 @@ protected:
             } else {
                 drops_full_.fetch_add(1, std::memory_order_relaxed);
             }
+
+            if (wal_ringbuffer_) {
+                wal::WalEvent we{};
+                we.timestamp_ns = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                      std::chrono::system_clock::now().time_since_epoch()).count());
+                we.node_id = tick.node_id;
+                we.type = wal::EventType::MARKET_TICK_BID; // or ask depending on parser, assuming bid for now
+                we.flags = 0;
+                we.payload.tick.price = tick.bid > 0 ? tick.bid : tick.ask;
+                we.payload.tick.amount = tick.weight;
+                (void)wal_ringbuffer_->try_push(we);
+            }
         } else {
             parse_errors_.fetch_add(1, std::memory_order_relaxed);
         }
@@ -159,6 +172,7 @@ protected:
 
     Config cfg_;
     std::shared_ptr<RingBuffer> ringbuffer_;
+    std::shared_ptr<wal::WalWriter::RingBuffer> wal_ringbuffer_;
     ParserPolicy parser_;
 
     std::atomic<bool> running_{false};
