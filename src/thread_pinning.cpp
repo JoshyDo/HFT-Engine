@@ -41,4 +41,39 @@ unsigned int logical_processor_count() noexcept {
 }
 
 }  // namespace phase7
+#else
+#include <pthread.h>
+#include <unistd.h>
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/thread_policy.h>
+#endif
+
+namespace phase7 {
+
+bool pin_current_thread_to_core(int core_id) noexcept {
+    if (core_id < 0) return false;
+#ifdef __linux__
+    cpu_set_t cpuset;
+    CPU_ZERO(&cpuset);
+    CPU_SET(core_id, &cpuset);
+    pthread_t current_thread = pthread_self();
+    return pthread_setaffinity_np(current_thread, sizeof(cpu_set_t), &cpuset) == 0;
+#elif defined(__APPLE__)
+    thread_affinity_policy_data_t policy = { core_id };
+    thread_port_t mach_thread = pthread_mach_thread_np(pthread_self());
+    return thread_policy_set(mach_thread, THREAD_AFFINITY_POLICY,
+                             (thread_policy_t)&policy,
+                             THREAD_AFFINITY_POLICY_COUNT) == KERN_SUCCESS;
+#else
+    return false;
+#endif
+}
+
+unsigned int logical_processor_count() noexcept {
+    long nprocs = sysconf(_SC_NPROCESSORS_ONLN);
+    return nprocs > 0 ? static_cast<unsigned int>(nprocs) : 0;
+}
+
+}  // namespace phase7
 #endif  // _WIN32

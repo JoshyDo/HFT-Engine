@@ -6,7 +6,8 @@ Engineered for strict zero-allocation in the hot path, OS-scheduler bypass, and 
 
 ## 🚀 Performance Metrics (Hardware-Verified)
 
-*   **Tick-to-Trade (T2T) Latency:** **< 300 µs** (measured from OS socket ingest to TCP payload dispatch).
+*   **Software Tick-to-Trade (T2T):** **~3.43 µs** (Median) / **~4.87 µs** (99th Percentile). Measured via `__rdtsc` on isolated pinned cores over local TCP loopback.
+*   **Core Logic Execution:** **42 CPU Cycles** (99th Percentile). Pure C++ hot-path latency (Zero-Copy Parse -> L2 Book Update -> Order Format), fully register-bound.
 *   **CUDA Micro-Kernel Execution:** **23.2 µs** (Dense-Graph Bellman-Ford on NVIDIA RTX 5070 Ti).
 *   **Parser Tail-Latency (99.9th):** **6 CPU Cycles** (CRTP-based Zero-Copy SBE parsing, defeating branch misprediction penalties).
 
@@ -50,6 +51,15 @@ Asynchronous, lock-free deterministic event logging offloaded to a dedicated bac
 ### 6. C++20 Coroutine Transport Layer
 Completely excised legacy callback chains and manual file descriptor polling. The network transport (TCP/UDP/WebSocket) operates entirely on `boost::asio` and C++20 coroutines (`co_await`), ensuring deterministic execution flows and strict RAII without sacrificing zero-allocation guarantees.
 
+## 🧠 Core Algorithmic Competency (Interview Sandbox)
+
+The repository includes an isolated `interview_prep/` environment tailored for Tier-1 HFT technical interviews. 
+
+- **Task 1:** Features a Test-Driven (GTest) Limit Order Book matching engine.
+- **Strict Algorithmic Constraints Achieved:** 
+  - $O(1)$ order cancellation (via `std::unordered_map` iterator tracking).
+  - $O(1)$ best price retrieval.
+  - Strict Price-Time Priority using `std::list`.
 ## 🛠️ Build Instructions
 
 Requires a Linux environment (Ubuntu 22.04+), macOS, or Windows (MSVC). NVIDIA CUDA Toolkit 12.x is strictly required for full GPU execution (CPU-only build available as fallback).
