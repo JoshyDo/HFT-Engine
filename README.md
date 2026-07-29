@@ -51,6 +51,16 @@ Asynchronous, lock-free deterministic event logging offloaded to a dedicated bac
 ### 6. C++20 Coroutine Transport Layer
 Completely excised legacy callback chains and manual file descriptor polling. The network transport (TCP/UDP/WebSocket) operates entirely on `boost::asio` and C++20 coroutines (`co_await`), ensuring deterministic execution flows and strict RAII without sacrificing zero-allocation guarantees.
 
+## 🧠 Core Algorithmic Competency (Interview Sandbox)
+
+The repository includes an isolated `interview_prep/` environment tailored for Tier-1 HFT technical interviews. 
+
+- **Task 1:** Features a Test-Driven (GTest) Limit Order Book matching engine.
+- **Strict Algorithmic Constraints Achieved:** 
+  - $O(1)$ order cancellation (via `std::unordered_map` iterator tracking).
+  - $O(1)$ best price retrieval.
+  - Strict Price-Time Priority using `std::list`.
+
 ## 🛠️ Build Instructions
 
 Requires a Linux environment (Ubuntu 22.04+), macOS, or Windows (MSVC). NVIDIA CUDA Toolkit 12.x is strictly required for full GPU execution (CPU-only build available as fallback).
