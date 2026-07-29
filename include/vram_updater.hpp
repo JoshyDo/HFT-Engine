@@ -472,7 +472,7 @@ private:
                 t_window_start = clock::now();
             } else {
                 // Wait for the next tick arrival or timeout.
-                // We utilize _mm_pause() for ultra-low latency busy-waiting.
+                // We utilize _mm_pause() for low latency busy-waiting.
                 _mm_pause();
             }
         }

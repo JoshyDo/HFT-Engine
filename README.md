@@ -1,4 +1,4 @@
-# Ultra-Low-Latency Crypto Arbitrage Engine (C++20 / CUDA)
+# Low-Latency Crypto Arbitrage Engine (C++20 / CUDA)
 
 An institutional-grade, tick-to-trade optimized high-frequency trading (HFT) engine designed to detect and execute triangular arbitrage opportunities across deep-liquidity crypto markets. 
 
