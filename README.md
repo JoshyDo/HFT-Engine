@@ -60,6 +60,7 @@ The repository includes an isolated `interview_prep/` environment tailored for T
   - $O(1)$ order cancellation (via `std::unordered_map` iterator tracking).
   - $O(1)$ best price retrieval.
   - Strict Price-Time Priority using `std::list`.
+
 ## 🛠️ Build Instructions
 
 Requires a Linux environment (Ubuntu 22.04+), macOS, or Windows (MSVC). NVIDIA CUDA Toolkit 12.x is strictly required for full GPU execution (CPU-only build available as fallback).
