@@ -27,26 +27,10 @@
 
 namespace phase7 {
 
-#ifdef _WIN32
-// Pins the CURRENT executing thread to a specific logical processor.
-// Core IDs are zero-indexed and typically encompass logical CPUs
-// (including HT siblings).
-//
-// Returns: true on success, false if the core does not exist
-// or the affinity mask is invalid.
 bool pin_current_thread_to_core(int core_id) noexcept;
 
 // Retrieves the total number of logical processors available in the system.
 // Returns 0 if unavailable.
 unsigned int logical_processor_count() noexcept;
-#else
-// POSIX fallback: typically pthread_setaffinity_np. Currently an inline stub.
-inline bool pin_current_thread_to_core(int) noexcept {
-    return false;
-}
-inline unsigned int logical_processor_count() noexcept {
-    return 0;
-}
-#endif
 
 }  // namespace phase7

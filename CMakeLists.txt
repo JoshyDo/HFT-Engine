@@ -158,3 +158,8 @@ add_executable(benchmark_parsers src/benchmark_parsers.cpp)
 target_include_directories(benchmark_parsers PRIVATE include)
 target_link_libraries(benchmark_parsers PRIVATE core_lib)
 target_compile_options(benchmark_parsers PRIVATE -O3 -march=native -DNDEBUG)
+
+add_executable(benchmark_tcp_loopback src/benchmark_tcp_loopback.cpp)
+target_include_directories(benchmark_tcp_loopback PRIVATE include)
+target_link_libraries(benchmark_tcp_loopback PRIVATE core_lib)
+target_compile_options(benchmark_tcp_loopback PRIVATE -O3 -march=native -DNDEBUG)
