@@ -28,8 +28,7 @@ else()
         -ffast-math           # Aggressive math optimization
         -fno-rtti             # Zero-overhead: Disable Run-Time Type Information
         -Wno-deprecated-literal-operator # Suppress simdjson warnings in C++20
-        -Wno-error=character-conversion  # Suppress GTest warning
-        -Wno-error=nan-infinity-disabled # Suppress GTest fast-math warning
+
     )
 endif()
 
@@ -161,5 +160,6 @@ target_compile_options(benchmark_parsers PRIVATE -O3 -march=native -DNDEBUG)
 
 add_executable(benchmark_tcp_loopback src/benchmark_tcp_loopback.cpp)
 target_include_directories(benchmark_tcp_loopback PRIVATE include)
-target_link_libraries(benchmark_tcp_loopback PRIVATE core_lib)
+target_compile_definitions(benchmark_tcp_loopback PRIVATE BOOST_ASIO_DISABLE_IO_URING)
+target_link_libraries(benchmark_tcp_loopback PRIVATE core_lib uring)
 target_compile_options(benchmark_tcp_loopback PRIVATE -O3 -march=native -DNDEBUG)

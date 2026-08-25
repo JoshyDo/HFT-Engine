@@ -1,74 +1,60 @@
-# Low-Latency Crypto Arbitrage Engine (C++20 / CUDA)
+# High-Frequency Trading (HFT) TCP Loopback Engine
 
-An institutional-grade, tick-to-trade optimized high-frequency trading (HFT) engine designed to detect and execute triangular arbitrage opportunities across deep-liquidity crypto markets. 
+An ultra-low latency C++20 HFT arbitrage engine designed to push the absolute physical limits of the standard Linux `AF_INET` TCP stack.
 
-Engineered for strict zero-allocation in the hot path, OS-scheduler bypass, and GPU-accelerated graph algorithms.
+This repository serves as a performance whitepaper and benchmarking suite, documenting the journey to achieve deterministic sub-3µs Tick-to-Trade (T2T) latency without relying on specialized networking hardware (NICs) or third-party kernel bypass libraries.
 
-## 🚀 Performance Metrics (Hardware-Verified)
+## Architecture & Performance Journey
 
-*   **Software Tick-to-Trade (T2T):** **~3.43 µs** (Median) / **~4.87 µs** (99th Percentile). Measured via `__rdtsc` on isolated pinned cores over local TCP loopback.
-*   **Core Logic Execution:** **42 CPU Cycles** (99th Percentile). Pure C++ hot-path latency (Zero-Copy Parse -> L2 Book Update -> Order Format), fully register-bound.
-*   **CUDA Micro-Kernel Execution:** **23.2 µs** (Dense-Graph Bellman-Ford on NVIDIA RTX 5070 Ti).
-*   **Parser Tail-Latency (99.9th):** **6 CPU Cycles** (CRTP-based Zero-Copy SBE parsing, defeating branch misprediction penalties).
+The core objective was to build a deterministic, zero-allocation trading loop and measure the true cost of network parsing and order generation.
 
-## 🧠 Architecture Overview
+### 1. The Core Logic: 12 Nanoseconds (38 Cycles)
+The heart of the engine is a tightly optimized, branch-less C++ processing pipeline.
+- **Zero-Copy SBE Parsing**: Directly parsing SBE (Simple Binary Encoding) market data ticks from the socket buffer.
+- **L2 Orderbook Updates**: O(1) in-place book updates.
+- **Order Generation**: Aggressive IOC order generation using SIMD-friendly structs.
 
-The system architecture circumvents traditional OS and memory-management bottlenecks by relying on contiguous memory layouts, compile-time polymorphism, and asynchronous hardware offloading.
+**Result**: The median time from byte-buffer parse to outgoing order structure generation is **12 ns (38 CPU cycles)**. The software logic operates physically at the L1 cache instruction limit.
 
-```mermaid
-graph TD;
-    A[Market Data Ingest UDP/TCP] -->|Zero-Copy / Packed Structs| B(CRTP Transport Abstraction);
-    B -->|Lock-Free Ringbuffer| C(Spin-Lock Dispatcher);
-    C -->|PCIe Pinned Memory| D[CUDA GPU VRAM];
-    D -->|FP32 Micro-Kernel  ~23.2 µs| E(Negative Cycle Detection);
-    E -->|Asynchronous Readback| F(Cycle Extraction & Pricing);
-    F -->|Zero-Allocation Thread Pool| G[Order Execution Endpoint];
+### 2. Baseline: Standard Linux TCP (~6.3 µs)
+Initial tests using standard blocking `send()`/`recv()` calls yielded a T2T latency of ~6.3 µs. While fast for standard web applications, the syscall context switching (Ring-3 to Ring-0) and `ksoftirqd` scheduling overhead introduce unacceptable jitter for High-Frequency Trading.
 
+### 3. The `LD_PRELOAD` AF_UNIX Anomaly (~0.76 µs)
+To bypass the TCP stack, an `LD_PRELOAD` shared library was written to transparently intercept `AF_INET` socket calls and route them through `AF_UNIX` Domain Sockets (Shared Memory IPC). 
+While this dropped the latency to an incredible **0.76 µs**, it was rejected as a vanity metric. Real exchanges (Eurex, CME) route orders via TCP/UDP over fiber optics, not local shared memory. Bypassing the network stack entirely masks the real-world network parsing characteristics we set out to benchmark.
+
+### 4. The Final Architecture: `io_uring` SQPOLL (~2.33 µs)
+To achieve the absolute physical limit of pure `AF_INET` TCP on Linux, we eliminated the system call overhead entirely while staying true to the network stack:
+- **io_uring SQPOLL**: Configured with `IORING_SETUP_SQPOLL`, offloading the `send`/`recv` submissions to a dedicated kernel thread. This completely eliminates context switches.
+- **SINGLE_ISSUER & Lock-Free Ring**: Configured with `IORING_SETUP_SINGLE_ISSUER` to strip atomic locks from the `io_uring` hotpath.
+- **Core Isolation & IRQ Affinity**: Pinned the C++ Engine to Core 4, the Mock Exchange to Core 2, the `io_uring` SQ threads to Cores 3 & 5, and strictly isolated the Linux Network Soft-IRQ (`ksoftirqd`) to Core 6. This prevents the 100% busy-polling userspace threads from starving the kernel packet delivery mechanism.
+
+**Final Deterministic Result (99th Percentile Jitter Eliminated):**
+```text
+Results (98999 samples after warmup):
+--- Core Logic (Parse -> Book -> Order) ---
+Median: 38 CPU Cycles (~0.0126 us)
+99th %: 38 CPU Cycles (~0.0126 us)
+
+--- Software T2T (Core Logic + SQPOLL submit) ---
+Median: 6992 CPU Cycles (~2.33 us)
+99th %: 7296 CPU Cycles (~2.43 us)
 ```
+*Note: 2.3 µs represents the mathematical floor for a loopback packet to traverse the `tcp_v4_rcv` Linux kernel stack on a 5 GHz CPU. Standard OS optimizations (e.g. `nohz_full`, `rcu_nocbs`) were used to eliminate the 1000Hz timer tick overhead.*
 
-## ⚙️ Key Hardware & Algorithmic Optimizations
-
-### 1. OS-Scheduler Bypass (Userspace Spinlocks)
-
-Eliminated standard `std::this_thread::sleep_for()` context switches. The engine utilizes 100% CPU-bound spin-locks via Intel `_mm_pause()` intrinsics, guaranteeing < 20 ns reaction times to incoming network buffers.
-
-### 2. GPU FP32 Throttling Bypass & L1-Cache Targeting
-
-Consumer GPUs artificially throttle FP64 (Double Precision) math. The kernel was downcast to FP32, maintaining sufficient precision for crypto-arbitrage log-math while unlocking 64x higher SM throughput. Memory architecture utilizes `__ldg()` read-only texture caches and strict L1 shared-memory arrays to prevent global VRAM latency.
-
-### 3. Branch Predictor Poisoning Defeat (CRTP)
-
-Market data feeds (JSON, SBE) are parsed using the Curiously Recurring Template Pattern (CRTP). This completely eliminates `virtual` function vtable lookups in the hot path. Micro-benchmarking with RDTSC timers proves this avoids catastrophic CPU pipeline flushes under unpredictable data streams.
-
-### 4. Single-Block CUDA Execution (The Micro-Graph)
-
-Instead of forcing a global VRAM grid synchronization, the dense trading pair graph ($V \le 1024$) is pulled entirely into the L1/Shared Memory of a *single* Streaming Multiprocessor (SM), turning milliseconds into microseconds.
-
-### 5. Zero-Overhead Write-Ahead Log (WAL)
-
-Asynchronous, lock-free deterministic event logging offloaded to a dedicated background thread. Utilizes a Vyukov-style SPSC ring buffer and 1GB pre-allocated, pre-faulted mmap NVMe chunks to guarantee zero page-fault latency spikes in the network hot-path.
-
-### 6. C++20 Coroutine Transport Layer
-Completely excised legacy callback chains and manual file descriptor polling. The network transport (TCP/UDP/WebSocket) operates entirely on `boost::asio` and C++20 coroutines (`co_await`), ensuring deterministic execution flows and strict RAII without sacrificing zero-allocation guarantees.
-
-## 🧠 Core Algorithmic Competency (Interview Sandbox)
-
-The repository includes an isolated `interview_prep/` environment tailored for Tier-1 HFT technical interviews. 
-
-- **Task 1:** Features a Test-Driven (GTest) Limit Order Book matching engine.
-- **Strict Algorithmic Constraints Achieved:** 
-  - $O(1)$ order cancellation (via `std::unordered_map` iterator tracking).
-  - $O(1)$ best price retrieval.
-  - Strict Price-Time Priority using `std::list`.
-
-## 🛠️ Build Instructions
-
-Requires a Linux environment (Ubuntu 22.04+), macOS, or Windows (MSVC). NVIDIA CUDA Toolkit 12.x is strictly required for full GPU execution (CPU-only build available as fallback).
+## Usage & Execution
 
 ```bash
-mkdir build && cd build
-cmake -DCMAKE_BUILD_TYPE=Release ..
-cmake --build . --config Release -j 8
+# 1. Compile the project
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
+
+# 2. Run the Benchmark (Root required for SQPOLL and IRQ Affinity)
+sudo ./run_final.sh
 ```
 
-*Note: The CMake configuration enforces strict optimization flags (`-O3` / `/O2`, `-march=native`) and utilizes Boost.Asio for cross-platform, asynchronous I/O.*
+## Future Work
+- **True Kernel Bypass (NIC-level)**: Integrating DPDK or Solarflare OpenOnload (via `EF_VI`) to completely bypass the kernel on physical network interfaces to break the 1µs barrier.
+- **Orderbook Scaling**: Stress-testing the 38-cycle core logic by scaling the L3 limit orderbook to track 10,000+ active instruments, forcing cache contention and memory bandwith analysis.
+- **UDP Multicast Ingestion**: Migrating the market data feed to UDP Multicast to mirror real-world exchange architectures (e.g., Eurex T7 / CME Globex).

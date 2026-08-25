@@ -75,9 +75,9 @@ TEST(CompilerTest, LeftAssociativeChainEmitsNestedOps) {
     // a < b < c  =>  (a < b) < c
     // Tree:
     //        <
-    //       / \
+    //       / \.
     //      <   c
-    //     / \
+    //     / \.
     //    a   b
     // Postorder traversal compiles left-subtree fully, then right-subtree,
     // then the operator at the current node. So bytecode for the OUTER `<`:

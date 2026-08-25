@@ -75,6 +75,7 @@
 //    and exactly 1 Consumer. MPMC requires CAS loops.
 // =============================================================================
 #pragma once
+#include <cstring>
 
 // C4324: Structure padded due to alignment specifier. Intentional
 // for false-sharing prevention (head_/tail_ on separate cache lines).
